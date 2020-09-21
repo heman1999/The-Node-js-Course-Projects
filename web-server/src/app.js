@@ -10,6 +10,7 @@ const app = express();
 const publicDirPath = path.join(__dirname, "../public");
 const viewsDirPath = path.join(__dirname, "../templates/views");
 const partialsDirPath = path.join(__dirname, "../templates/partials");
+const port = process.env.PORT || 3000;
 
 // Set up handlebar engine and views location
 app.use(express.static(publicDirPath));
@@ -59,4 +60,4 @@ app.get("*", (req, res) => {
   res.render("notFound");
 });
 
-app.listen(3000, () => console.log("Server running...."));
+app.listen(port, () => console.log("Server running on port " + port + "...."));
