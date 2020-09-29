@@ -4,6 +4,13 @@ const http = require("http");
 const socketio = require("socket.io");
 const Filter = require("bad-words");
 const { generateMessage } = require("./utils/messages");
+const {
+  addUser,
+  removeUser,
+  getUser,
+  getUsersInRoom,
+} = require("./utils/user");
+const { get } = require("https");
 
 const app = new experss();
 const server = http.createServer(app);
@@ -16,13 +23,25 @@ app.use(experss.static(pathToPublicDir));
 io.on("connection", (socket) => {
   console.log("new connection!");
 
-  socket.on("join", ({ username, room }) => {
+  socket.on("join", ({ username, room }, callback) => {
+    const { error, user } = addUser({ id: socket.id, username, room });
+    if (error) {
+      return callback(error);
+    }
     socket.join(room);
 
-    socket.emit("message", generateMessage("Welcome!"));
+    socket.emit("message", generateMessage("Admin", "Welcome!"));
     socket.broadcast
-      .to(room)
-      .emit("message", generateMessage(`A ${username} has joined!`));
+      .to(user.room)
+      .emit(
+        "message",
+        generateMessage("Admin", `${user.username} has joined!`)
+      );
+    io.to(user.room).emit("roomData", {
+      room: user.room,
+      users: getUsersInRoom(user.room),
+    });
+    callback();
   });
 
   socket.on("sendMessage", (message, callback) => {
@@ -30,20 +49,36 @@ io.on("connection", (socket) => {
     if (filter.isProfane(message)) {
       return callback("Profanity not allowed!");
     }
-    io.emit("message", generateMessage(message));
-    callback();
+
+    const user = getUser(socket.id);
+    if (user) {
+      io.to(user.room).emit("message", generateMessage(user.username, message));
+      callback();
+    }
   });
 
   socket.on("sendLocation", ({ latitude, longitude }, callback) => {
-    io.emit(
+    const user = getUser(socket.id);
+    io.to(user.room).emit(
       "locationMessage",
-      generateMessage(`https://google.com/maps?q=${latitude},${longitude}`)
+      generateMessage(
+        user.username,
+        `https://google.com/maps?q=${latitude},${longitude}`
+      )
     );
     callback();
   });
 
   socket.on("disconnect", () => {
-    io.emit("message", generateMessage("A user has left!"));
+    const user = removeUser(socket.id);
+    io.to(user.room).emit(
+      "message",
+      generateMessage("Admin", `${user.username} has left!`)
+    );
+    io.to(user.room).emit("roomData", {
+      room: user.room,
+      users: getUsersInRoom(user.room),
+    });
   });
 });
 
